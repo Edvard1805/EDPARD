@@ -117,13 +117,14 @@
       backdrop-filter: blur(12px);
       border: 1px solid var(--blush);
       border-radius: 50px;
-      padding: 10px 18px;
+      padding: 10px 16px;
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 8px;
       box-shadow: 0 4px 20px rgba(200,100,110,.15);
       font-size: .82em;
       color: var(--text);
+      max-width: calc(100vw - 36px);
     }
     .music-bar button {
       background: var(--deep);
@@ -141,12 +142,21 @@
       flex-shrink: 0;
     }
     .music-bar button:hover { background: #b5474f; transform: scale(1.08); }
+    .music-bar button.sm {
+      width: 28px;
+      height: 28px;
+      font-size: .8em;
+      background: var(--blush);
+      color: var(--deep);
+    }
+    .music-bar button.sm:hover { background: var(--rose); color: #fff; transform: scale(1.08); }
+    .music-bar .track-info { display: flex; flex-direction: column; min-width: 0; }
     .music-bar .track-name {
       font-family: 'Lato', sans-serif;
       font-weight: 300;
       white-space: nowrap;
       overflow: hidden;
-      max-width: 160px;
+      max-width: 150px;
       text-overflow: ellipsis;
       color: var(--deep);
     }
@@ -155,6 +165,11 @@
       color: var(--rose);
       letter-spacing: .1em;
       text-transform: uppercase;
+    }
+    .music-bar .track-counter {
+      font-size: .68em;
+      color: var(--rose);
+      white-space: nowrap;
     }
     .eq {
       display: flex;
@@ -438,15 +453,18 @@
 
 <!-- Music bar -->
 <div class="music-bar" id="musicBar">
-  <div>
+  <div class="track-info">
     <div class="music-label">♪ Now Playing</div>
     <div class="track-name" id="trackName">Tambahkan musik…</div>
+    <div class="track-counter" id="trackCounter"></div>
   </div>
   <div class="eq" id="eq">
     <span></span><span></span><span></span><span></span>
   </div>
+  <button class="sm" id="prevBtn" title="Lagu sebelumnya">⏮</button>
   <button id="playBtn" title="Play / Pause">▶</button>
-  <audio id="bgMusic" loop></audio>
+  <button class="sm" id="nextBtn" title="Lagu berikutnya">⏭</button>
+  <audio id="bgMusic"></audio>
 </div>
 
 <!-- HERO -->
@@ -492,9 +510,9 @@
 
   <!-- Add music -->
   <label class="add-music-zone" for="music-input">
-    <p>🎵 <strong>Tambahkan Musik</strong> — Klik untuk memilih file MP3 / audio</p>
+    <p>🎵 <strong>Tambahkan Musik</strong> — Klik untuk memilih satu atau beberapa file MP3 / audio</p>
   </label>
-  <input type="file" id="music-input" accept="audio/*">
+  <input type="file" id="music-input" accept="audio/*" multiple>
 </section>
 
 <!-- MESSAGE -->
@@ -542,30 +560,75 @@
   })();
 
   /* ── MUSIC ── */
-  const audio    = document.getElementById('bgMusic');
-  const playBtn  = document.getElementById('playBtn');
-  const trackName= document.getElementById('trackName');
-  const eq       = document.getElementById('eq');
+  const audio       = document.getElementById('bgMusic');
+  const playBtn     = document.getElementById('playBtn');
+  const prevBtn     = document.getElementById('prevBtn');
+  const nextBtn     = document.getElementById('nextBtn');
+  const trackName   = document.getElementById('trackName');
+  const trackCounter= document.getElementById('trackCounter');
+  const eq          = document.getElementById('eq');
+
+  let playlist = [];   // { url, name }
+  let curIdx   = 0;
 
   function setPlaying(v) {
     playBtn.textContent = v ? '⏸' : '▶';
     eq.classList.toggle('playing', v);
   }
 
+  function loadTrack(idx, autoPlay) {
+    if (!playlist.length) return;
+    curIdx = (idx + playlist.length) % playlist.length;
+    audio.src = playlist[curIdx].url;
+    trackName.textContent = playlist[curIdx].name;
+    trackCounter.textContent = playlist.length > 1
+      ? `${curIdx + 1} / ${playlist.length}`
+      : '';
+    if (autoPlay) audio.play().catch(() => {});
+  }
+
   playBtn.addEventListener('click', () => {
-    if (!audio.src) return;
+    if (!playlist.length) return;
     audio.paused ? audio.play() : audio.pause();
   });
+
+  prevBtn.addEventListener('click', () => {
+    if (!playlist.length) return;
+    // If more than 3s in, restart current; else go to previous
+    if (audio.currentTime > 3) {
+      audio.currentTime = 0;
+    } else {
+      loadTrack(curIdx - 1, !audio.paused);
+    }
+  });
+
+  nextBtn.addEventListener('click', () => {
+    if (!playlist.length) return;
+    loadTrack(curIdx + 1, !audio.paused);
+  });
+
   audio.addEventListener('play',  () => setPlaying(true));
   audio.addEventListener('pause', () => setPlaying(false));
-  audio.addEventListener('ended', () => setPlaying(false));
+  // Auto-play next track when current ends
+  audio.addEventListener('ended', () => loadTrack(curIdx + 1, true));
 
   document.getElementById('music-input').addEventListener('change', function() {
-    const file = this.files[0];
-    if (!file) return;
-    audio.src = URL.createObjectURL(file);
-    trackName.textContent = file.name.replace(/\.[^.]+$/, '');
-    audio.play().catch(() => {});
+    const files = Array.from(this.files);
+    if (!files.length) return;
+    const wasEmpty = playlist.length === 0;
+    files.forEach(file => {
+      playlist.push({
+        url: URL.createObjectURL(file),
+        name: file.name.replace(/\.[^.]+$/, '')
+      });
+    });
+    if (wasEmpty) loadTrack(0, true);
+    else {
+      // Update counter only
+      trackCounter.textContent = playlist.length > 1
+        ? `${curIdx + 1} / ${playlist.length}`
+        : '';
+    }
   });
 
   /* ── SLIDESHOW ── */
